@@ -1,0 +1,11 @@
+imgaug
+opencv-python
+pandas
+ipykernel
+matplotlib
+scikit-image
+scipy
+shapely
+geojson
+scikit-learn
+# gdal
