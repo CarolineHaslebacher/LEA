@@ -9,6 +9,7 @@ import os
 # from winreg import HKEY_PERFORMANCE_DATA
 from geojson.geometry import Point
 from osgeo import gdal, gdalnumeric, ogr
+gdal.UseExceptions()
 from pathlib import Path
 import matplotlib.pyplot as plt
 
@@ -231,6 +232,7 @@ def geojson_to_mask(geoms, dataset):
         # if i in [30, 35, 36, 41, 86]:
         #     continue
         holes_count = 0 # count number of holes!
+        # loop through sub-polygons
         for fts_idx in range(len(feature['geometry']['coordinates'])):
             holes = False # set holes index to False for each part
             
