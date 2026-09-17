@@ -1,0 +1,34 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  LEA: Lineament Extraction Algorithm for Geological
+  Analyses
+message: 'If you use this software, please cite it as below.'
+type: software
+authors:
+  - given-names: Caroline
+    family-names: Haslebacher
+    orcid: 'https://orcid.org/0000-0003-0674-1216'
+repository-code: 'https://github.com/CarolineHaslebacher/LEA'
+abstract: >-
+  Code accompanying publications 
+
+  - Haslebacher, C., Tejero, J. G., Prockter, L. M.,
+  Leonard, E. J., Rhoden, A. R., & Thomas, N. (2025, June).
+  Length, Width, and Relative Age Analysis of Lineaments in
+  the Galileo Regional Maps with LineaMapper. The Planetary
+  Science Journal , 6 (6), 133. doi: 10.3847/PSJ/ADD349
+
+  - Haslebacher, C., Dümbgen, L., Rhoden, A.R., Prockter,
+  L.M., Leonard, E.J., Thomas, N., Peixoto, V. Europa's
+  Lineaments Show Locally Preferred Directions when
+  Corrected for the Subsolar Ground Azimuth Bias. JGR
+  Planets, under review.
+keywords:
+  - geological analysis
+license: GPL-3.0
+commit: e67ff96
+version: 1.0.0
+date-released: '2026-03-18'
