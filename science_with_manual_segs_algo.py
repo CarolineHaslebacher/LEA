@@ -8,26 +8,24 @@
 import os
 # from winreg import HKEY_PERFORMANCE_DATA
 from geojson.geometry import Point
-from osgeo import gdal, gdalnumeric, ogr
+from osgeo import gdal #, gdalnumeric, ogr
 from pathlib import Path
 import matplotlib.pyplot as plt
 
 import json
 import skimage.draw
 import numpy as np
-import skimage.io
+# import skimage.io
 
 import cv2
-from PIL import Image, ImageChops
-
-import skimage.measure
+from PIL import Image #, ImageChops
 
 from geojson import MultiPolygon, Feature, FeatureCollection, dump, Point
 import math
 import scipy
 from scipy.sparse import coo_matrix
 
-import random
+# import random
 
 from datetime import datetime
 import time
@@ -40,8 +38,8 @@ from scipy.spatial.distance import cdist
 import xml.etree.ElementTree as ET
 import json
 import pandas as pd
-import skimage.measure
-import pickle
+# import skimage.measure
+# import pickle
 
 import argparse
 from MAIN_loop1_to_loop4 import get_polygeopaths
@@ -1618,10 +1616,14 @@ if __name__ == '__main__': # this allows me to import functions defined above!
                         nearest_pho_y_px, nearest_pho_x_px = xli[scidist] # this is result (row,col) of the nearest element above 0
                         # extract again, with nearest neighbor coordinates:
                         sunazi = pho_arr[nearest_pho_y_px, nearest_pho_x_px]
-                    # NOTE: don't forget that the extracted sunazimuth is in a wrong coordinate system:
-                    # (east is 0, south is 90deg)
-                    # change it to a geological crs (North is 0, East is 90 deg)
-                    sunazi = (sunazi + 90)%360 # tested
+                    # NOTE: the below commented lines are wrong, but I leave them in so I don't repeat this mistake.
+                    # the subsolar ground azimuth is indeed starting from true north and going clock-wise. Therefore, no transformation is needed.
+                    # the mistake was that I accidentally used the 'sun azimuth' instead of the 'subsolar ground azimuth' in isis phocube!
+                    # WRONG NOTE: don't forget that the extracted sunazimuth is in a wrong coordinate system:
+                    # WRONG (east is 0, south is 90deg)
+                    # WRONG change it to a geological crs (North is 0, East is 90 deg)
+                    # WRONG: sunazi = (sunazi + 90)%360 # tested
+                    
                     # assign it:
                     geoms['features'][mask_idx]['properties']['sunazimuth'] = sunazi
                 except ValueError:
