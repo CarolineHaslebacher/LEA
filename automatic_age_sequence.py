@@ -164,7 +164,9 @@ if __name__ == '__main__': # this allows me to import functions defined above!
         # 'subpoly' means sub-polygons of one feature. This might be the cross-cutting we are looking for!
         # it is not straight-forward to 'find the gap', because we do not know where the lineament 'is going'  
         for i, feature in enumerate(geoms['features']):
+        for i, feature in enumerate(geoms['features'][:1]):
             print(feature)
+            ccboxes_poly_list = []
             subpoly_list = []
             # if there is only one subpolygon, skip. There are no cross-cutting features recorded (does not mean that there aren't any though).
             if len(feature['geometry']['coordinates']) == 1:
@@ -184,14 +186,22 @@ if __name__ == '__main__': # this allows me to import functions defined above!
             plot_polygon(subpoly, ax=ax, color='darkblue', alpha=0.7)
             for poly1 in subpoly_list:
                 ccboxes_poly = get_closest_subpolygons_box(subpoly_list, poly1)
+                print(len(ccboxes_poly))
 
                 # plot during development
                 plot_polygon(poly1, ax=ax, color='lightblue', alpha=0.7)
+                cci = 0
                 for ccbox_poly in ccboxes_poly:
+                    print(cci)
                     plot_polygon(ccbox_poly, ax=ax, color='green', alpha=0.7)
+                    cci += 1
+                    ccboxes_poly_list.append(ccbox_poly)
+            # delete boxes that overlap to a large extent with (or contain) parts of a polygon
+              
+            
 
 
-TODO: try fts_idx = 1 and debug missing gaps
+TODO: try for i, feature in enumerate(geoms['features'][:1]): and debug missing gaps
 and push to github
 
 if this all works, I can continue with the search for overlaps
@@ -229,11 +239,13 @@ def get_closest_subpolygons_box(subpoly_list, poly1, width=None):
 
     gap_boxes = []
 
+    # dev plotting
+    fig, ax = plt.subplots()
+    plot_polygon(poly1, ax=ax, color='darkblue', alpha=0.7)
+
     for poly2, pdist in pairs_sorted[:2]:
-        poly2 = min(
-            (p for p in subpoly_list if not p.equals(poly1)),
-            key=poly1.distance,
-        )
+        # print(poly2)
+        # plot_polygon(poly2, ax=ax, color='lightblue', alpha=0.7)
         p1, p2 = nearest_points(poly1, poly2)
 
         dx, dy = p2.x - p1.x, p2.y - p1.y
