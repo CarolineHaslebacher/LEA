@@ -168,9 +168,11 @@ if __name__ == '__main__': # this allows me to import functions defined above!
             print(feature)
             ccboxes_poly_list = []
             subpoly_list = []
+            del_idcs_ccbox = []
             # if there is only one subpolygon, skip. There are no cross-cutting features recorded (does not mean that there aren't any though).
             if len(feature['geometry']['coordinates']) == 1:
                 continue
+
             for fts_idx in range(len(feature['geometry']['coordinates'])):
                 print(fts_idx) # sub-polygon nr.
                 # for each sub-polygon, transform to a shapely polygon object
@@ -181,6 +183,7 @@ if __name__ == '__main__': # this allows me to import functions defined above!
                 subpoly = Polygon(feature['geometry']['coordinates'][fts_idx][0])
                 # append to list
                 subpoly_list.append(subpoly)
+
             # loop through all subpolygons to search for the closest other subpolygon in the list
             fig, ax = plt.subplots()
             plot_polygon(subpoly, ax=ax, color='darkblue', alpha=0.7)
@@ -193,11 +196,79 @@ if __name__ == '__main__': # this allows me to import functions defined above!
                 cci = 0
                 for ccbox_poly in ccboxes_poly:
                     print(cci)
-                    plot_polygon(ccbox_poly, ax=ax, color='green', alpha=0.7)
+                    plot_polygon(ccbox_poly, ax=ax, color='green', alpha=0.3)
                     cci += 1
                     ccboxes_poly_list.append(ccbox_poly)
+
             # delete boxes that overlap to a large extent with (or contain) parts of a polygon
-              
+            for ccbox_idx, ccbox in enumerate(ccboxes_poly_list):
+                for subpoly in subpoly_list:
+                    if ccbox.intersects(subpoly):
+                        # Get the overlapping geometry
+                        inter_geom = ccbox.intersection(subpoly)
+                        # union_geom = ccbox.union(subpoly)
+
+                        # Calculate the intersection-over-feature_area (IoU) area
+                        Iofa = inter_geom.area / subpoly.area
+                        if Iofa > 0.1: # if the feature and the box overlap for more than 10% of the feature, we discard the box
+                            if not ccbox_idx in del_idcs_ccbox:
+                                del_idcs_ccbox.append(ccbox_idx)
+                for other_ccbox_idx, other_ccbox in enumerate(ccboxes_poly_list):
+                    # skip if they are equal
+                    if not ccbox_idx == other_ccbox_idx:
+                        # check if they overlap too much
+                        intersection_ccboxes = ccbox.intersection(other_ccbox).area
+                        union_ccboxes = ccbox.union(other_ccbox).area
+                        IoU = intersection_ccboxes / union_ccboxes
+                        if IoU > 0.5: # I expect such boxes to overlap to a large degree, let's say 50%
+                            # if we need to remove one, check one of the two respective indexes is already listed
+                            if not (ccbox_idx in del_idcs_ccbox or other_ccbox_idx in del_idcs_ccbox):
+                                # if not, append this index
+                                del_idcs_ccbox.append(ccbox_idx)
+
+            # now, we can savely delete all features that are stored in del_idcs list
+            # ATTENTION: you cannot delete iteratively, as this will shift indices!!! We find a solution: delete biggest indices first --> this will not shift the earlier indices
+            # and we only want to have unique values
+
+            del_idcs_ccbox.reverse()
+            for delidx in del_idcs_ccbox:
+                del ccboxes_poly_list[delidx]
+
+            # plot for debugging:
+            for ccbox_poly in ccboxes_poly_list:
+                fig, ax = plt.subplots()
+                for spoly in subpoly_list:
+                    plot_polygon(spoly, ax=ax, color='blue', alpha=0.3)
+                print(ccbox_poly)
+                plot_polygon(ccbox_poly, ax=ax, color='green', alpha=0.3)
+                plt.show()
+            print(len(ccboxes_poly_list))
+
+
+            # # now, let's also remove overlapping 'duplicate' boxes:
+            # print(len(ccboxes_poly_list)) # 36
+            # unique_ccboxes_poly_list = []
+            # for poly in ccboxes_poly_list:
+            #     # Check if the polygon topologically matches any already added
+            #     if not any(poly.equals(u_poly) for u_poly in unique_ccboxes_poly_list):
+            #         unique_ccboxes_poly_list.append(poly)
+            #     # also test whether any IoU of ccboxes with themselves is overlapping too much 
+            #     intersection = poly.intersection(subpoly)
+                
+
+            # print(len(unique_ccboxes_poly_list)) # 9
+            # # plot for debugging:
+            # for ccbox_poly in unique_ccboxes_poly_list:
+            #     fig, ax = plt.subplots()
+            #     for spoly in subpoly_list:
+            #         plot_polygon(spoly, ax=ax, color='blue', alpha=0.3)
+            #     print(ccbox_poly)
+            #     plot_polygon(ccbox_poly, ax=ax, color='green', alpha=0.3)
+            #     plt.show()
+
+                        
+
+
             
 
 
