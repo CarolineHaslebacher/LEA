@@ -996,7 +996,7 @@ def fit_line_to_mask_MINAREARECT(masktf):
     # stack to array of shape [Npoints, 1, 2] (2 for the x/y pair)
     ftl_idcs = np.stack(ftl_idcs)
     centerpnts, (p01, p03), alpha = cv2.minAreaRect(ftl_idcs)
-    # attention: widht and length are not ordered by width and length, but rather P0-P3 comes second!
+    # attention: width and length are not ordered by width and length, but rather P0-P3 comes second!
     # So: if P0-P3 is smaller than P0-P1, then it is the width, else the length.
     # Therefore, the below code is not necessary anymore!
     # test if P0-P3 is smaller than P0-P1

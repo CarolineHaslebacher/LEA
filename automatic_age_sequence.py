@@ -10,6 +10,10 @@ import numpy as np
 import cv2
 from datetime import datetime
 import time
+from shapely.geometry import Polygon, box,  MultiPolygon, LineString
+from itertools import combinations
+from shapely.ops import nearest_points
+from shapely.plotting import plot_polygon
 
 from science_with_manual_segs_algo import * # cut_bounding_box, load_tiff_arr_specified, geojson_to_mask
 
@@ -156,112 +160,161 @@ if __name__ == '__main__': # this allows me to import functions defined above!
             raise Warning('lenght of geoms is {}, but shape of masks is {}'.format(len(geoms['features']), masks.shape))
 
 
-        # go through geoms, find gaps with minimum area rectangle boxes
+        # go through each feature, find gaps with minimum area rectangle boxes
+        # 'subpoly' means sub-polygons of one feature. This might be the cross-cutting we are looking for!
+        # it is not straight-forward to 'find the gap', because we do not know where the lineament 'is going'  
         for i, feature in enumerate(geoms['features']):
             print(feature)
             subpoly_list = []
-            # if there is only one subpolygon, skip
+            # if there is only one subpolygon, skip. There are no cross-cutting features recorded (does not mean that there aren't any though).
             if len(feature['geometry']['coordinates']) == 1:
                 continue
             for fts_idx in range(len(feature['geometry']['coordinates'])):
                 print(fts_idx) # sub-polygon nr.
                 # for each sub-polygon, transform to a shapely polygon object
+                # Hint: you can plot this polygon by executing 'subpoly'
+                # or with: 
+                # fig, ax = plt.subplots()
+                # plot_polygon(subpoly, ax=ax, color='lightblue', alpha=0.7)
                 subpoly = Polygon(feature['geometry']['coordinates'][fts_idx][0])
                 # append to list
                 subpoly_list.append(subpoly)
             # loop through all subpolygons to search for the closest other subpolygon in the list
+            fig, ax = plt.subplots()
+            plot_polygon(subpoly, ax=ax, color='darkblue', alpha=0.7)
             for poly1 in subpoly_list:
-                for poly2 in subpoly_list:
-                    if poly1 == poly2:
-                        continue
-                    print(poly1)
-                    print(poly2)
-                    print('')
+                ccboxes_poly = get_closest_subpolygons_box(subpoly_list, poly1)
 
+                # plot during development
+                plot_polygon(poly1, ax=ax, color='lightblue', alpha=0.7)
+                for ccbox_poly in ccboxes_poly:
+                    plot_polygon(ccbox_poly, ax=ax, color='green', alpha=0.7)
+
+
+TODO: try fts_idx = 1 and debug missing gaps
+and push to github
+
+if this all works, I can continue with the search for overlaps
+
+#%%
             # from that, we can generate a ccbox (cross-cutting box)
+def get_min_width(poly):
+    # Compute the minimum rotated rectangle
+    min_rect = poly.minimum_rotated_rectangle
 
-from itertools import combinations
-from shapely.geometry import box, MultiPolygon
-from shapely.ops import nearest_points
+    # In Shapely 2.0+, use mbr.boundary.coords (or mbr.exterior.coords)
+    coords = list(min_rect.boundary.coords)
 
-def get_closest_subpolygons_box(poly1, poly2):
-    """
-    Constructs a bounding box between the two most adjacent subpolygons.
-    """
-    if len(multipoly.geoms) < 2:
-        raise ValueError("MultiPolygon must contain at least two subpolygons.")
+    # Calculate the lengths of the adjacent edges forming the rectangle
+    # The MBR has 5 coordinate pairs (the last one closes the polygon: index 0 to 4)
+    width = LineString([coords[0], coords[1]]).length
+    height = LineString([coords[1], coords[2]]).length
 
-    # Find the closest pair of subpolygons using all combinations
-    min_dist = float('inf')
-    closest_pair = None
+    # Ensure width is the shorter dimension and height is the longer dimension
+    w = min(width, height)
+    h = max(width, height)
 
-    for poly1, poly2 in combinations(multipoly.geoms, 2):
-        # Calculate the distance between the two polygons
-        dist = poly1.distance(poly2)
-        if dist < min_dist:
-            min_dist = dist
-            closest_pair = (poly1, poly2)
+    return w
 
-    # Extract the actual closest points on the boundaries of these two subpolygons
-    poly1, poly2 = closest_pair
-    p1, p2 = nearest_points(poly1, poly2)
+def get_closest_subpolygons_box(subpoly_list, poly1, width=None):
 
-    # Construct a rectangular box between the two closest point coordinates
-    # We use p1.x, p1.y, p2.x, p2.y to create the envelope
-    min_x = min(p1.x, p2.x)
-    max_x = max(p1.x, p2.x)
-    min_y = min(p1.y, p2.y)
-    max_y = max(p1.y, p2.y)
+    # If I only search for one closest polygon, I might miss the one on the other side of the subpolygon
+    # fix: search for the two closest. Eliminate overlapping ccboxes in the end
+    pairs = [
+    (p, poly1.distance(p))
+    for p in subpoly_list
+    if not p.equals(poly1)
+    ]
+    pairs_sorted = sorted(pairs, key=lambda item: item[1])
 
-    # Add a minimal buffer so the box has a non-zero area (optional)
-    if min_x == max_x: max_x += 0.0001
-    if min_y == max_y: max_y += 0.0001
+    gap_boxes = []
 
-    return box(min_x, min_y, max_x, max_y)
+    for poly2, pdist in pairs_sorted[:2]:
+        poly2 = min(
+            (p for p in subpoly_list if not p.equals(poly1)),
+            key=poly1.distance,
+        )
+        p1, p2 = nearest_points(poly1, poly2)
 
+        dx, dy = p2.x - p1.x, p2.y - p1.y
+        length = math.hypot(dx, dy)
+        if length == 0:
+            raise ValueError("Polygons touch or overlap; no gap to fill.")
 
-from shapely.geometry import Polygon
+        ux, uy = dx / length, dy / length
+        nx, ny = -uy, ux
 
-# Define your polygon coordinates (e.g., L-shape)
-coords = [(0, 0), (5, 0), (5, 2), (2, 2), (2, 5), (0, 5)]
-poly = Polygon(coords)
+        if width is None:
+            width = np.mean([get_min_width(poly1), get_min_width(poly2)])
+            # width = length * 0.5
+        half = width / 2
 
-# Get the minimum rotated bounding box
-min_bbox = poly.minimum_rotated_rectangle
+        # Extend slightly past p1/p2 so the difference cleanly trims to the edges
+        eps = length * 0.01
+        a = (p1.x - ux * eps, p1.y - uy * eps)
+        b = (p2.x + ux * eps, p2.y + uy * eps)
 
-# Output the new bounding box coordinates
-print(list(min_bbox.exterior.coords))
+        box_poly = Polygon([
+            (a[0] + nx * half, a[1] + ny * half),
+            (b[0] + nx * half, b[1] + ny * half),
+            (b[0] - nx * half, b[1] - ny * half),
+            (a[0] - nx * half, a[1] - ny * half),
+        ])
 
-            centerpnts, (p01, p03), alpha = cv2.minAreaRect(ftl_idcs)
+        # Trim away anything overlapping the two polygons
+        gap_box = box_poly.difference(poly1).difference(poly2)
+        oriented = gap_box.minimum_rotated_rectangle
+        gap_boxes.append(oriented)
 
+    return gap_boxes
 
-        # go through masks, every mask contains exactly one feature
-        for mask_idx in range(masks.shape[-1]): # range(486,masks.shape[-1]): # masks.shape[-1]
-
-            ######### STEP 1: pre-processing of mask
-            # also, we need the current mask and the bounding box
-            # extract the current mask
-            m = masks[:,:,mask_idx] 
-            # get bounding box and cutout (not minimum area bbox, but simply cutoff of black lines to reduce storage)
-            p,k,w,h, cut, extrac_cut, p_center, k_center = cut_bounding_box(m, mask_idx, extrac)
-
-            # test if mask is not almost empty. This might happen if a lineament got dissected during tessellation
-            # for this, we simply calculate the area in px
-            areapx = len(cut[cut>0])
-            if areapx < area_limit:
-                print('empty mask found. deleting and skipping. except for area calculation.')
-                # add to list of indices to delete
-                del_idcs.append(mask_idx)
-                continue # then, we skip 
-
-            ############ STEP 2: construct bounding box for fragments
+#%%
 
 
-        # now, we can savely delete all features that are stored in del_idcs list
-        # ATTENTION: you cannot delete iteratively, as this will shift indices!!! We find a solution: delete biggest indices first --> this will not shift the earlier indices
-        del_idcs.reverse()
-        for delidx in del_idcs:
-            del geoms['features'][delidx]
+#%%
+
+# from shapely.geometry import Polygon
+
+# # Define your polygon coordinates (e.g., L-shape)
+# coords = [(0, 0), (5, 0), (5, 2), (2, 2), (2, 5), (0, 5)]
+# poly = Polygon(coords)
+
+# # Get the minimum rotated bounding box
+# min_bbox = poly.minimum_rotated_rectangle
+
+# # Output the new bounding box coordinates
+# print(list(min_bbox.exterior.coords))
+
+#             centerpnts, (p01, p03), alpha = cv2.minAreaRect(ftl_idcs)
+
+
+#         # go through masks, every mask contains exactly one feature
+#         for mask_idx in range(masks.shape[-1]): # range(486,masks.shape[-1]): # masks.shape[-1]
+
+#             ######### STEP 1: pre-processing of mask
+#             # also, we need the current mask and the bounding box
+#             # extract the current mask
+#             m = masks[:,:,mask_idx] 
+#             # get bounding box and cutout (not minimum area bbox, but simply cutoff of black lines to reduce storage)
+#             p,k,w,h, cut, extrac_cut, p_center, k_center = cut_bounding_box(m, mask_idx, extrac)
+
+#             # test if mask is not almost empty. This might happen if a lineament got dissected during tessellation
+#             # for this, we simply calculate the area in px
+#             areapx = len(cut[cut>0])
+#             if areapx < area_limit:
+#                 print('empty mask found. deleting and skipping. except for area calculation.')
+#                 # add to list of indices to delete
+#                 del_idcs.append(mask_idx)
+#                 continue # then, we skip 
+
+#             ############ STEP 2: construct bounding box for fragments
+
+
+#         # now, we can savely delete all features that are stored in del_idcs list
+#         # ATTENTION: you cannot delete iteratively, as this will shift indices!!! We find a solution: delete biggest indices first --> this will not shift the earlier indices
+#         del_idcs.reverse()
+#         for delidx in del_idcs:
+#             del geoms['features'][delidx]
 
 
 
