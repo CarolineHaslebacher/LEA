@@ -10,10 +10,12 @@ import numpy as np
 import cv2
 from datetime import datetime
 import time
-from shapely.geometry import Polygon, box,  MultiPolygon, LineString
+from shapely.geometry import Polygon, box,  MultiPolygon, LineString, shape
 from itertools import combinations
 from shapely.ops import nearest_points
 from shapely.plotting import plot_polygon
+from shapely import STRtree
+import shapely
 
 from science_with_manual_segs_algo import * # cut_bounding_box, load_tiff_arr_specified, geojson_to_mask
 
@@ -81,7 +83,7 @@ if __name__ == '__main__': # this allows me to import functions defined above!
     geopaths, polypaths = get_polygeopaths(poly_orig, geo_orig) # might be adapted
 
     # for dev,overwrite polypaths:
-    polypaths = [basepath / 'polygons/for_analysis' / 'E4ESMACSTR01_GalileoSSI_Equi-cog.geojson'] # Jesse has manually made an age sequence for this polygon
+    polypaths = [basepath / 'polygons/analysed/Equirectangular' / 'E4ESMACSTR01_GalileoSSI_Equi-cog.geojson'] # Jesse has manually made an age sequence for this polygon
 
 
     # specify the basepath (used for saving)
@@ -163,9 +165,16 @@ if __name__ == '__main__': # this allows me to import functions defined above!
         # go through each feature, find gaps with minimum area rectangle boxes
         # 'subpoly' means sub-polygons of one feature. This might be the cross-cutting we are looking for!
         # it is not straight-forward to 'find the gap', because we do not know where the lineament 'is going'  
+        # for i, feature in enumerate(geoms['features'][:1]):
+        feat_geoms_shapely = [shape(f['geometry']) for f in geoms['features']]
+        # final matrix:
+        nrows = len(geoms['features'])
+        ncols = nrows
+        age_sequence_matrix = np.zeros((nrows, ncols))
+
         for i, feature in enumerate(geoms['features']):
-        for i, feature in enumerate(geoms['features'][:1]):
-            print(feature)
+            print('feature Nr. {}'.format(i))
+            UFID_feature_i = feature['properties']['UFID'].split('_')[-1] # e.g. last entry of ['E4ESMACSTR01', 'GalileoSSI', 'Equi-cog', '36'] from 'E4ESMACSTR01_GalileoSSI_Equi-cog_36'
             ccboxes_poly_list = []
             subpoly_list = []
             del_idcs_ccbox = []
@@ -174,7 +183,7 @@ if __name__ == '__main__': # this allows me to import functions defined above!
                 continue
 
             for fts_idx in range(len(feature['geometry']['coordinates'])):
-                print(fts_idx) # sub-polygon nr.
+                # print(fts_idx) # sub-polygon nr.
                 # for each sub-polygon, transform to a shapely polygon object
                 # Hint: you can plot this polygon by executing 'subpoly'
                 # or with: 
@@ -185,18 +194,18 @@ if __name__ == '__main__': # this allows me to import functions defined above!
                 subpoly_list.append(subpoly)
 
             # loop through all subpolygons to search for the closest other subpolygon in the list
-            fig, ax = plt.subplots()
-            plot_polygon(subpoly, ax=ax, color='darkblue', alpha=0.7)
+            # fig, ax = plt.subplots()
+            # plot_polygon(subpoly, ax=ax, color='darkblue', alpha=0.7)
             for poly1 in subpoly_list:
                 ccboxes_poly = get_closest_subpolygons_box(subpoly_list, poly1)
-                print(len(ccboxes_poly))
+                # print(len(ccboxes_poly))
 
                 # plot during development
-                plot_polygon(poly1, ax=ax, color='lightblue', alpha=0.7)
+                # plot_polygon(poly1, ax=ax, color='lightblue', alpha=0.7)
                 cci = 0
                 for ccbox_poly in ccboxes_poly:
-                    print(cci)
-                    plot_polygon(ccbox_poly, ax=ax, color='green', alpha=0.3)
+                    # print(cci)
+                    # plot_polygon(ccbox_poly, ax=ax, color='green', alpha=0.3)
                     cci += 1
                     ccboxes_poly_list.append(ccbox_poly)
 
@@ -235,47 +244,62 @@ if __name__ == '__main__': # this allows me to import functions defined above!
                 del ccboxes_poly_list[delidx]
 
             # plot for debugging:
+            fig, ax = plt.subplots()
             for ccbox_poly in ccboxes_poly_list:
-                fig, ax = plt.subplots()
                 for spoly in subpoly_list:
                     plot_polygon(spoly, ax=ax, color='blue', alpha=0.3)
                 print(ccbox_poly)
                 plot_polygon(ccbox_poly, ax=ax, color='green', alpha=0.3)
-                plt.show()
-            print(len(ccboxes_poly_list))
+            plt.show()
+            print('{} (Number of cc boxes)'.format(len(ccboxes_poly_list)))
+            print('{} (Number of expected cc boxes)'.format(len(subpoly_list) -1)) # expected number of ccboxes 
 
 
-            # # now, let's also remove overlapping 'duplicate' boxes:
-            # print(len(ccboxes_poly_list)) # 36
-            # unique_ccboxes_poly_list = []
-            # for poly in ccboxes_poly_list:
-            #     # Check if the polygon topologically matches any already added
-            #     if not any(poly.equals(u_poly) for u_poly in unique_ccboxes_poly_list):
-            #         unique_ccboxes_poly_list.append(poly)
-            #     # also test whether any IoU of ccboxes with themselves is overlapping too much 
-            #     intersection = poly.intersection(subpoly)
-                
+            # Loop through all ccboxes (for one polygon)
+            tree = STRtree(feat_geoms_shapely)
 
-            # print(len(unique_ccboxes_poly_list)) # 9
-            # # plot for debugging:
-            # for ccbox_poly in unique_ccboxes_poly_list:
-            #     fig, ax = plt.subplots()
-            #     for spoly in subpoly_list:
-            #         plot_polygon(spoly, ax=ax, color='blue', alpha=0.3)
-            #     print(ccbox_poly)
-            #     plot_polygon(ccbox_poly, ax=ax, color='green', alpha=0.3)
-            #     plt.show()
+            # for ccbox_poly in ccboxes_poly_list:
+            # we query the tree with our ccbox
+            fig, ax = plt.subplots()
+            plot_polygon(feat_geoms_shapely[i], ax=ax, color='blue', alpha=0.3)
+            for ccb_idx, feat_idx in tree.query(ccboxes_poly_list).T: # [query_idx, tree_idx]  # Shapely 2.x returns integer indices
+                # skip if equal to the current polygon
+                if feat_idx == i:
+                    continue
+                print(ccb_idx)
+                print(feat_idx)
+                print('\n')
+                # plot all of them
+                plot_polygon(feat_geoms_shapely[feat_idx], ax=ax, color='yellow', alpha=0.3)
+                plot_polygon(ccboxes_poly_list[ccb_idx], ax=ax, color='green', alpha=0.3)
+                inter = ccbox_poly.intersection(feat_geoms_shapely[feat_idx]).area
+                # test if the intersection is at least 20% of the full ccbox area
+                Ioca = inter / ccboxes_poly_list[ccb_idx].area
+                if Ioca > 0.2:
+                    # this means that feature[feat_idx] is younger than feature[i]
+                    # in Jesse's matrix, this means that 
+                    # Jesse’s code says: "excel_csv: .csv file from excel containing manually 
+                    # taken cross cutting relationships in the form where column ID is younger than row ID”
+                    # fill this into matrix, using the actual UFID number:
+                    # numpy: [row, col]
+                    UFID_feature_younger = geoms['features'][feat_idx]['properties']['UFID'].split('_')[-1]
+                    age_sequence_matrix[int(UFID_feature_i), int(UFID_feature_younger)] = 1
 
-                        
+        # save as csv
+        np.savetxt("tests_E4.csv", age_sequence_matrix, delimiter=",")
+
+            # # Probably best to use shapely’s STRtree for fastest results
+            # # Build the spatial index tree
+            # tree = STRtree(ccboxes_poly_list + multipolys)
+
+            # # 3. Query the tree against your original list
+            # # This returns an array of geometry indices that intersect
+            # indices_1, indices_2 = tree.query(polygons, predicate="intersects")
+            # # Log these as younger than the cross-cut features directly in a matrix (basically the csv that Jesse filled out).
 
 
-            
 
-
-TODO: try for i, feature in enumerate(geoms['features'][:1]): and debug missing gaps
-and push to github
-
-if this all works, I can continue with the search for overlaps
+        
 
 #%%
             # from that, we can generate a ccbox (cross-cutting box)
@@ -311,8 +335,8 @@ def get_closest_subpolygons_box(subpoly_list, poly1, width=None):
     gap_boxes = []
 
     # dev plotting
-    fig, ax = plt.subplots()
-    plot_polygon(poly1, ax=ax, color='darkblue', alpha=0.7)
+    # fig, ax = plt.subplots()
+    # plot_polygon(poly1, ax=ax, color='darkblue', alpha=0.7)
 
     for poly2, pdist in pairs_sorted[:2]:
         # print(poly2)
